@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Attendance Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      min-height: 100vh;
+    }
+    .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    h1 { font-size: 1.5rem; }
+    .btn {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.08s ease, opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-danger { background: #dc2626; color: #fff; }
+    .btn-outline { background: #fff; color: #334155; border: 1px solid #cbd5e1; }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      margin-bottom: 24px;
+    }
+    h2 { font-size: 1.1rem; margin-bottom: 16px; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 0.95rem;
+    }
+    input[type="text"]:focus {
+      outline: 2px solid #2563eb;
+      outline-offset: 1px;
+    }
+    .camera-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    video, canvas {
+      width: 100%;
+      max-width: 480px;
+      border-radius: 10px;
+      background: #0f172a;
+    }
+    .preview-img {
+      max-width: 240px;
+      border-radius: 10px;
+      border: 2px solid #cbd5e1;
+    }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; justify-content: center; }
+    .record-row { text-align: center; }
+    .tools {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 0.9rem;
+      vertical-align: middle;
+    }
+    th { background: #f8fafc; font-weight: 600; }
+    .thumb {
+      width: 40px;
+      height: 40px;
+      object-fit: cover;
+      border-radius: 6px;
+      background: #e2e8f0;
+    }
+    .empty { text-align: center; color: #64748b; padding: 24px 0; }
+    .date-col { white-space: nowrap; font-size: 0.8rem; color: #475569; }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #0f172a;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    @media (max-width: 640px) {
+      .form-grid { grid-template-columns: 1fr; }
+      table { font-size: 0.8rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Attendance Tracker</h1>
+      <div class="tools">
+        <button class="btn btn-primary" id="btnExportPdf">Export PDF</button>
+        <button class="btn btn-danger" id="btnClearAll">Clear All</button>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>Log Attendance</h2>
+      <div class="form-grid">
+        <div>
+          <label for="name">Name</label>
+          <input type="text" id="name" placeholder="e.g. Juan Dela Cruz" />
+        </div>
+        <div>
+          <label for="office">Office</label>
+          <input type="text" id="office" placeholder="e.g. HR Department" />
+        </div>
+      </div>
+
+      <div class="camera-box">
+        <video id="video" autoplay playsinline style="display:none"></video>
+        <img id="captured" class="preview-img" style="display:none" alt="Captured photo" />
+        <div class="actions">
+          <button class="btn btn-outline" id="btnStartCamera">Start Camera</button>
+          <button class="btn btn-primary" id="btnCapture" style="display:none">Capture Photo</button>
+          <button class="btn btn-outline" id="btnRetake" style="display:none">Retake / New Camera</button>
+          <label class="btn btn-outline" style="cursor:pointer">
+            Upload Photo
+            <input type="file" id="fileInput" accept="image/*" style="display:none" />
+          </label>
+        </div>
+      </div>
+
+      <div class="record-row">
+        <button class="btn btn-success" id="btnSave">Save Attendance</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Records (<span id="recordCount">0</span>)</h2>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Photo</th>
+              <th>Name</th>
+              <th>Office</th>
+              <th>Date / Time</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const STORAGE_KEY = 'attendance-records';
+      let stream = null;
+      let capturedImage = null;
+
+      const $ = (id) => document.getElementById(id);
+
+      const nameInput = $('name');
+      const officeInput = $('office');
+      const video = $('video');
+      const captured = $('captured');
+      const tbody = $('tbody');
+      const recordCount = $('recordCount');
+      const toast = $('toast');
+
+      const btnStartCamera = $('btnStartCamera');
+      const btnCapture = $('btnCapture');
+      const btnRetake = $('btnRetake');
+      const btnSave = $('btnSave');
+      const btnExportPdf = $('btnExportPdf');
+      const btnClearAll = $('btnClearAll');
+
+      let toastTimer;
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+      }
+
+      function getRecords() {
+        try {
+          return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        } catch {
+          return [];
+        }
+      }
+
+      function saveRecords(records) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+      }
+
+      function renderTable() {
+        const records = getRecords();
+        recordCount.textContent = records.length;
+        if (records.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty">No attendance records yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = records
+          .map((r) => `
+            <tr>
+              <td>${r.image ? '<img class="thumb" src="' + r.image + '" alt="photo" />' : '—'}</td>
+              <td>${escapeHtml(r.name)}</td>
+              <td>${escapeHtml(r.office)}</td>
+              <td class="date-col">${escapeHtml(r.timestamp)}</td>
+            </tr>
+          `)
+          .join('');
+      }
+
+      function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, (ch) => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[ch]));
+      }
+
+      const fileInput = $('fileInput');
+
+      const cameraMode = { active: false };
+      let cameraStarting = false;
+
+      function stopCamera() {
+        cameraMode.active = false;
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+          stream = null;
+        }
+        video.srcObject = null;
+      }
+
+      function showPreview(dataUrl) {
+        capturedImage = dataUrl;
+        captured.src = dataUrl;
+        captured.style.display = 'block';
+        video.style.display = 'none';
+        btnStartCamera.style.display = 'none';
+        btnCapture.style.display = 'none';
+        btnRetake.style.display = 'inline-block';
+        stopCamera();
+      }
+
+      function resetToIdle() {
+        stopCamera();
+        capturedImage = null;
+        captured.src = '';
+        captured.style.display = 'none';
+        video.style.display = 'none';
+        btnStartCamera.style.display = 'inline-block';
+        btnCapture.style.display = 'none';
+        btnRetake.style.display = 'none';
+        fileInput.value = '';
+      }
+
+      async function startCamera() {
+        if (cameraStarting) return;
+        cameraStarting = true;
+        stopCamera();
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          showToast('Camera not supported in this browser - use Upload Photo instead');
+          cameraStarting = false;
+          return;
+        }
+
+        btnStartCamera.disabled = true;
+        btnStartCamera.textContent = 'Starting...';
+        try {
+          stopCamera();
+          const s = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false
+          });
+          stream = s;
+          cameraMode.active = true;
+          video.srcObject = s;
+          const ready = new Promise((resolve, reject) => {
+            const onMeta = () => resolve();
+            const onError = () => reject(video.error || new Error('video failed to load'));
+            video.onloadedmetadata = onMeta;
+            video.onerror = onError;
+            setTimeout(() => {
+              if (!video.videoWidth) reject(new Error('video metadata timed out'));
+            }, 8000);
+          });
+          await ready;
+          video.onloadedmetadata = null;
+          video.onerror = null;
+          await video.play();
+          if (!cameraMode.active) return;
+          video.style.display = 'block';
+          captured.style.display = 'none';
+          btnStartCamera.style.display = 'none';
+          btnCapture.style.display = 'inline-block';
+          btnRetake.style.display = 'none';
+          showToast('Camera started - click Capture Photo');
+        } catch (err) {
+          stopCamera();
+          showToast('Camera unavailable: ' + err.message);
+          resetToIdle();
+        } finally {
+          cameraStarting = false;
+          btnStartCamera.disabled = false;
+          btnStartCamera.textContent = 'Start Camera';
+        }
+      }
+
+      function capture() {
+        if (!cameraMode.active || !stream) {
+          showToast('Start the camera first');
+          return;
+        }
+        if (!video.videoWidth || !video.videoHeight) {
+          showToast('Camera not ready yet, try again');
+          return;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        showPreview(dataUrl);
+        showToast('Photo captured');
+      }
+
+      function retake() {
+        resetToIdle();
+        startCamera();
+      }
+
+      function handleFileUpload(e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => showPreview(reader.result);
+        reader.onerror = () => showToast('Could not read that image');
+        reader.readAsDataURL(file);
+      }
+
+      function save() {
+        const name = nameInput.value.trim();
+        const office = officeInput.value.trim();
+        if (!name || !office) {
+          showToast('Please fill in Name and Office');
+          return;
+        }
+        const record = {
+          id: Date.now(),
+          name,
+          office,
+          image: capturedImage,
+          timestamp: new Date().toLocaleString()
+        };
+        const records = getRecords();
+        records.push(record);
+        saveRecords(records);
+        resetToIdle();
+        nameInput.value = '';
+        officeInput.value = '';
+        renderTable();
+        showToast('Attendance saved');
+      }
+
+      function exportPdf() {
+        const records = getRecords();
+        if (records.length === 0) {
+          showToast('No records to export');
+          return;
+        }
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+        const photoSize = 22;
+
+        doc.setFontSize(16);
+        doc.text('Attendance Report', margin, 16);
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text('Generated: ' + new Date().toLocaleString(), margin, 22);
+        doc.setTextColor(0);
+
+        let y = 30;
+        records.forEach((r, i) => {
+          if (y > 275) {
+            doc.addPage();
+            y = 20;
+          }
+          let x = margin;
+          if (r.image) {
+            try {
+              doc.addImage(r.image, 'JPEG', x, y, photoSize, photoSize);
+            } catch (e) {
+              /* skip corrupt image */
+            }
+            x += photoSize + 6;
+          }
+          doc.text((i + 1) + '. ' + r.name, x, y + 6);
+          doc.setFontSize(9);
+          doc.setTextColor(80);
+          doc.text('Office: ' + r.office, x, y + 12);
+          doc.text('Date: ' + r.timestamp, x, y + 17);
+          doc.setTextColor(0);
+          doc.setFontSize(10);
+          y += photoSize + 8;
+        });
+
+        doc.save('attendance-report.pdf');
+        showToast('PDF exported');
+      }
+
+      function clearAll() {
+        if (!confirm('Delete all attendance records?')) return;
+        saveRecords([]);
+        renderTable();
+        showToast('All records cleared');
+      }
+
+      btnStartCamera.addEventListener('click', startCamera);
+      btnCapture.addEventListener('click', capture);
+      btnRetake.addEventListener('click', retake);
+      fileInput.addEventListener('change', handleFileUpload);
+      btnSave.addEventListener('click', save);
+      btnExportPdf.addEventListener('click', exportPdf);
+      btnClearAll.addEventListener('click', clearAll);
+
+      resetToIdle();
+    })();
+  </script>
+</body>
+</html>
