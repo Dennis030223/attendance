@@ -50,3 +50,5 @@ Camera-based attendance with photo capture, automatic CSV records, and photos sa
 - **Same photo filename reused** — attendees with the same name overwrite the same photo file.
 - macOS double-click shortcut: right-click → *New Terminal at Folder* is easiest, or create a
   `start.command` file containing `node server.js`.
+
+
