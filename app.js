@@ -93,6 +93,15 @@
 
   function setLiveCameraUI() {
     video.style.display = 'block';
+    captured.style.display = 'none';
+    btnStartCamera.style.display = 'none';
+    btnCapture.style.display = 'inline-block';
+    btnRetake.style.display = 'inline-block';
+  }
+
+  function showCapturedPhoto() {
+    video.style.display = 'none';
+    captured.style.display = 'block';
     btnStartCamera.style.display = 'none';
     btnCapture.style.display = 'inline-block';
     btnRetake.style.display = 'inline-block';
@@ -108,8 +117,7 @@
   function showPreview(dataUrl) {
     capturedImage = dataUrl;
     captured.src = dataUrl;
-    captured.style.display = 'block';
-    btnRetake.style.display = 'inline-block';
+    showCapturedPhoto();
   }
 
   function resetToIdle() {
@@ -190,14 +198,15 @@
     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
     capturedImage = canvas.toDataURL('image/jpeg', 0.85);
     captured.src = capturedImage;
-    captured.style.display = 'block';
-    btnRetake.style.display = 'inline-block';
+    showCapturedPhoto();
     showToast('Photo captured');
   }
 
   function retake() {
     clearPhoto();
-    if (!cameraMode.active) {
+    if (cameraMode.active) {
+      setLiveCameraUI();
+    } else {
       setIdleUI();
       startCamera();
     }
@@ -243,12 +252,14 @@
     records.push(record);
     saveRecords(records);
     clearPhoto();
-    nameInput.value = '';
-    officeInput.value = '';
-    if (!cameraMode.active) {
+    if (cameraMode.active) {
+      setLiveCameraUI();
+    } else {
       setIdleUI();
       startCamera();
     }
+    nameInput.value = '';
+    officeInput.value = '';
     renderTable();
     showToast('Attendance saved');
     if (photo) {

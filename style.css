@@ -289,11 +289,13 @@ video, canvas {
   background: var(--primary);
 }
 .preview-img {
-  max-width: 112px;
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   border: 2px solid var(--gold);
-  margin-top: 8px;
+  background: var(--primary);
 }
 .actions {
   display: flex;
