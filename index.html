@@ -86,6 +86,7 @@
               <input type="file" id="attendanceFile" accept=".csv,text/csv" hidden />
             </label>
             <button class="btn btn-outline" id="btnExportAttendance">Export CSV</button>
+            <button class="btn btn-primary" id="btnExportPdf">Save PDF</button>
             <button class="btn btn-danger" id="btnClearAll">Clear All</button>
           </div>
         </div>
@@ -108,6 +109,7 @@
 
   <div class="toast" id="toast"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -22,6 +22,7 @@
   const btnRetake = $('btnRetake');
   const btnSave = $('btnSave');
   const btnExportAttendance = $('btnExportAttendance');
+  const btnExportPdf = $('btnExportPdf');
   const btnClearAll = $('btnClearAll');
   const attendanceFile = $('attendanceFile');
 
@@ -421,6 +422,92 @@
     showToast('Attendance exported');
   }
 
+  function resolveImageInput(record) {
+    if (record.image) return Promise.resolve(record.image);
+    if (record.imagePath && location.protocol !== 'file:') {
+      return fetch(record.imagePath).then((res) => {
+        if (!res.ok) return null;
+        return res.blob();
+      }).then((blob) => {
+        if (!blob || !blob.type.startsWith('image/')) return null;
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blob);
+        });
+      }).catch(() => null);
+    }
+    return Promise.resolve(null);
+  }
+
+  async function exportPdf() {
+    const records = getRecords();
+    if (records.length === 0) {
+      showToast('No records to export');
+      return;
+    }
+    if (!window.jspdf) {
+      showToast('PDF library failed to load - check internet / refresh');
+      return;
+    }
+    btnExportPdf.disabled = true;
+    btnExportPdf.textContent = 'Building PDF...';
+    try {
+      const images = await Promise.all(records.map(resolveImageInput));
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 14;
+      const photoSize = 22;
+
+      doc.setFontSize(16);
+      doc.text('Attendance Report', margin, 16);
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text('Generated: ' + new Date().toLocaleString(), margin, 22);
+      doc.setFontSize(9);
+      doc.text('Total records: ' + records.length, margin, 27);
+      doc.setTextColor(0);
+
+      let y = 34;
+      records.forEach((r, i) => {
+        if (y > 275) {
+          doc.addPage();
+          y = 20;
+        }
+        let x = margin;
+        if (images[i]) {
+          try {
+            doc.addImage(images[i], 'JPEG', x, y, photoSize, photoSize, undefined, 'FAST');
+          } catch (e) {
+            x -= 8;
+          }
+          x += photoSize + 6;
+        }
+        doc.setFontSize(10);
+        doc.text((i + 1) + '. ' + r.name, x, y + 6);
+        doc.setFontSize(9);
+        doc.setTextColor(80);
+        doc.text('ID: ' + (r.id || ''), x, y + 12);
+        doc.text('Office: ' + r.office, x, y + 17);
+        doc.text('Date: ' + recordDate(r) + '  Time: ' + recordTime(r), x, y + 22);
+        doc.setFontSize(9);
+        doc.setTextColor(40);
+        doc.text('Status: Present', x, y + 27);
+        doc.setTextColor(0);
+        doc.setFontSize(10);
+        y += Math.max(photoSize, 30) + 8;
+      });
+
+      doc.save('attendance-report.pdf');
+      showToast('PDF saved');
+    } finally {
+      btnExportPdf.disabled = false;
+      btnExportPdf.textContent = 'Save PDF';
+    }
+  }
+
   function importAttendance(text) {
     const rows = parseCSV(text);
     if (rows.length < 2) {
@@ -523,6 +610,7 @@
   fileInput.addEventListener('change', handleFileUpload);
   btnSave.addEventListener('click', save);
   btnExportAttendance.addEventListener('click', exportAttendance);
+  btnExportPdf.addEventListener('click', exportPdf);
 
   attendanceFile.addEventListener('change', (e) => {
     const f = e.target.files && e.target.files[0];
