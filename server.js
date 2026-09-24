@@ -1,14 +1,20 @@
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
 const IMAGES_DIR = path.join(ROOT, 'images');
+const CERT_DIR = path.join(ROOT, 'certs');
+const REPORTS_DIR = path.join(ROOT, 'reports');
 const ATTENDANCE_FILE = path.join(DATA_DIR, 'attendance.csv');
 const HEADER = 'ID,Name,Office,Date,Time In,Time Out,Status,File Location';
+
+let httpsEnabled = false;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -17,6 +23,7 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.csv': 'text/csv; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
+  '.pdf': 'application/pdf',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
@@ -142,7 +149,73 @@ function handleImageSave(req, res) {
   });
 }
 
-http.createServer((req, res) => {
+function handlePdfSave(req, res) {
+  const chunks = [];
+  req.on('data', (chunk) => chunks.push(chunk));
+  req.on('end', () => {
+    if (!chunks.length) return sendJson(res, 400, { ok: false, error: 'empty body' });
+    const buf = Buffer.concat(chunks);
+    if (!buf.length) return sendJson(res, 400, { ok: false, error: 'empty body' });
+    fs.mkdirSync(REPORTS_DIR, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const file = path.join(REPORTS_DIR, 'attendance-' + stamp + '.pdf');
+    writeFileRetry(file, buf, 0, (err) => {
+      if (err) return sendJson(res, 500, { ok: false, error: err.message });
+      sendJson(res, 200, { ok: true, path: path.relative(ROOT, file) });
+    });
+  });
+}
+
+function getLanIps() {
+  const out = [];
+  const ifaces = os.networkInterfaces();
+  Object.keys(ifaces).forEach((name) => {
+    (ifaces[name] || []).forEach((n) => {
+      if (n && n.family === 'IPv4' && !n.internal) out.push(n.address);
+    });
+  });
+  return out;
+}
+
+function ensureCertificate() {
+  if (fs.existsSync(path.join(CERT_DIR, 'key.pem')) && fs.existsSync(path.join(CERT_DIR, 'cert.pem'))) {
+    return true;
+  }
+  fs.mkdirSync(CERT_DIR, { recursive: true });
+  const ips = getLanIps();
+  const alt = ['DNS.1 = localhost', 'IP.1 = 127.0.0.1']
+    .concat(ips.map((ip, i) => 'IP.' + (i + 2) + ' = ' + ip))
+    .join('\n');
+  const cfgFile = path.join(CERT_DIR, 'openssl.cnf');
+  const cfg = [
+    '[req]',
+    'distinguished_name = dn',
+    'prompt = no',
+    'x509_extensions = v3',
+    '',
+    '[dn]',
+    'CN = Attendance Tracker',
+    '',
+    '[v3]',
+    'basicConstraints = CA:FALSE',
+    'keyUsage = digitalSignature, keyEncipherment',
+    'extendedKeyUsage = serverAuth',
+    'subjectAltName = @alt',
+    '',
+    '[alt]',
+    alt
+  ].join('\n');
+  fs.writeFileSync(cfgFile, cfg);
+  const res = spawnSync('openssl', [
+    'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+    '-keyout', path.join(CERT_DIR, 'key.pem'),
+    '-out', path.join(CERT_DIR, 'cert.pem'),
+    '-days', '825', '-config', cfgFile
+  ], { stdio: 'ignore' });
+  return res.status === 0;
+}
+
+const handler = (req, res) => {
   const url = new URL(req.url, 'http://localhost');
 
   if (url.pathname === '/api/health') {
@@ -152,6 +225,39 @@ http.createServer((req, res) => {
 
   if (url.pathname === '/api/ping') {
     sendJson(res, 200, { ok: true, v: 2 });
+    return;
+  }
+
+  if (url.pathname === '/api/host') {
+    const ips = getLanIps();
+    const proto = httpsEnabled ? 'https' : 'http';
+    const lanIp = ips[0] || os.hostname();
+    const host = (req.headers.host || '').split(':')[0];
+    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0];
+    let publicUrl = null;
+    if (forwardedProto && !/^localhost/i.test(host) && !ips.includes(host)) {
+      publicUrl = forwardedProto + '://' + host;
+    } else if (fs.existsSync(path.join(ROOT, 'public-url.txt'))) {
+      const saved = fs.readFileSync(path.join(ROOT, 'public-url.txt'), 'utf8').trim();
+      if (saved) publicUrl = saved;
+    }
+    sendJson(res, 200, {
+      url: publicUrl || proto + '://' + lanIp + ':' + PORT,
+      local: proto + '://localhost:' + PORT,
+      public: publicUrl,
+      ips,
+      port: PORT,
+      https: httpsEnabled
+    });
+    return;
+  }
+
+  if (url.pathname === '/api/pdf') {
+    if (req.method === 'POST') {
+      handlePdfSave(req, res);
+    } else {
+      sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    }
     return;
   }
 
@@ -188,18 +294,35 @@ http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
     fs.createReadStream(filePath).pipe(res);
   });
-}).listen(PORT, () => {
-  const url = 'http://localhost:' + PORT;
-  console.log('Attendance Tracker running at  ' + url);
-  console.log('Attendance auto-saves to     ' + ATTENDANCE_FILE);
-  console.log('API v2 — photo endpoint /api/image enabled');
-  if (!process.argv.includes('--no-open')) {
-    const open = (cmd, args) => {
-      const child = spawn(cmd, args, { detached: true, stdio: 'ignore', windowsVerbatimArguments: true });
-      child.unref();
-    };
-    if (process.platform === 'win32') open('cmd', ['/c', 'start', '', url]);
-    else if (process.platform === 'darwin') open('open', [url]);
-    else open('xdg-open', [url]);
-  }
-});
+};
+
+function startServer(server, scheme) {
+  const lanIp = getLanIps()[0] || 'localhost';
+  server.listen(PORT, () => {
+    const url = scheme + '://localhost:' + PORT;
+    console.log('Attendance Tracker running at  ' + url);
+    console.log('LAN (for other devices):      ' + scheme + '://' + lanIp + ':' + PORT);
+    console.log('Attendance auto-saves to     ' + ATTENDANCE_FILE);
+    console.log('API v2 — photo endpoint /api/image enabled');
+    if (!process.argv.includes('--no-open')) {
+      const open = (cmd, args) => {
+        const child = spawn(cmd, args, { detached: true, stdio: 'ignore', windowsVerbatimArguments: true });
+        child.unref();
+      };
+      if (process.platform === 'win32') open('cmd', ['/c', 'start', '', url]);
+      else if (process.platform === 'darwin') open('open', [url]);
+      else open('xdg-open', [url]);
+    }
+  });
+}
+
+if (ensureCertificate()) {
+  httpsEnabled = true;
+  const cert = fs.readFileSync(path.join(CERT_DIR, 'cert.pem'));
+  const key = fs.readFileSync(path.join(CERT_DIR, 'key.pem'));
+  startServer(https.createServer({ key, cert }, handler), 'https');
+  console.log('HTTPS enabled — camera works on other devices over the network.');
+} else {
+  console.log('Could not create HTTPS certificate — using HTTP (camera needs localhost).');
+  startServer(http.createServer(handler), 'http');
+}

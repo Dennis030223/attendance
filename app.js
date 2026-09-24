@@ -16,6 +16,9 @@
   const recordCount = $('recordCount');
   const toast = $('toast');
   const modeNotice = $('modeNotice');
+  const shareCard = $('shareCard');
+  const qrBox = $('qrBox');
+  const shareUrlEl = $('shareUrl');
 
   const btnStartCamera = $('btnStartCamera');
   const btnCapture = $('btnCapture');
@@ -150,15 +153,14 @@
       cameraMode.active = true;
       cameraStarted = true;
       video.muted = true;
+      video.setAttribute('muted', '');
+      video.setAttribute('playsinline', '');
       video.playsInline = true;
       video.srcObject = s;
-      await new Promise((resolve) => {
-        const finish = () => { video.onloadedmetadata = null; video.onerror = null; resolve(); };
-        video.onloadedmetadata = finish;
-        video.onerror = finish;
-        setTimeout(finish, 4000);
-      });
-      await video.play().catch(() => {});
+      await waitForVideoReady(video, 6000);
+      const p = video.play();
+      if (p && p.catch) p.catch(() => {});
+      await waitVideoPlaying(video, 6000);
       if (!cameraMode.active) return;
       setLiveCameraUI();
       if (silent !== true) showToast('Camera started - click Capture Photo');
@@ -171,6 +173,48 @@
       btnStartCamera.disabled = false;
       btnStartCamera.textContent = 'Start Camera';
     }
+  }
+
+  function waitForVideoReady(videoEl, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      if (videoEl.readyState >= 1) return resolve();
+      const timer = setTimeout(() => { cleanup(); reject(new Error('video not ready')); }, timeoutMs);
+      const onMeta = () => { cleanup(); resolve(); };
+      const onError = () => { cleanup(); reject(videoEl.error || new Error('video error')); };
+      function cleanup() {
+        clearTimeout(timer);
+        videoEl.removeEventListener('loadedmetadata', onMeta);
+        videoEl.removeEventListener('loadeddata', onMeta);
+        videoEl.removeEventListener('canplay', onMeta);
+        videoEl.removeEventListener('error', onError);
+      }
+      videoEl.addEventListener('loadedmetadata', onMeta);
+      videoEl.addEventListener('loadeddata', onMeta);
+      videoEl.addEventListener('canplay', onMeta);
+      videoEl.addEventListener('error', onError);
+    });
+  }
+
+  function waitVideoPlaying(videoEl, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      if (videoEl.readyState >= 2 && !videoEl.paused) return resolve();
+      const timer = setTimeout(() => {
+        cleanup();
+        if (videoEl.readyState >= 2) resolve();
+        else reject(new Error('camera did not start'));
+      }, timeoutMs);
+      const onPlay = () => { cleanup(); resolve(); };
+      const onError = () => { cleanup(); reject(videoEl.error || new Error('video error')); };
+      function cleanup() {
+        clearTimeout(timer);
+        videoEl.removeEventListener('playing', onPlay);
+        videoEl.removeEventListener('canplay', onPlay);
+        videoEl.removeEventListener('error', onError);
+      }
+      videoEl.addEventListener('playing', onPlay);
+      videoEl.addEventListener('canplay', onPlay);
+      videoEl.addEventListener('error', onError);
+    });
   }
 
   function bootstrapCamera() {
@@ -502,9 +546,35 @@
 
       doc.save('attendance-report.pdf');
       showToast('PDF saved');
+      await savePdfToHost(doc, records.length);
     } finally {
       btnExportPdf.disabled = false;
       btnExportPdf.textContent = 'Save PDF';
+    }
+  }
+
+  async function savePdfToHost(doc, recordCount) {
+    if (location.protocol === 'file:') return;
+    const blob = doc.output('blob');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    try {
+      const res = await fetch('/api/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/pdf' },
+        body: blob,
+        signal: ctrl.signal
+      });
+      clearTimeout(timer);
+      if (res.ok) {
+        const json = await res.json();
+        showToast('PDF saved to laptop (' + json.path + ') · ' + recordCount + ' records');
+      } else {
+        showToast('PDF downloaded · host could not save it (server restart?)');
+      }
+    } catch (err) {
+      clearTimeout(timer);
+      showToast('PDF downloaded · could not reach host');
     }
   }
 
@@ -604,6 +674,21 @@
     showToast('All records cleared');
   }
 
+  function showShareCard() {
+    if (location.protocol === 'file:' || !shareCard || typeof qrcode !== 'function') return;
+    fetch('/api/host').then((res) => (res.ok ? res.json() : null)).then((info) => {
+      if (!info || !info.url) return;
+      shareUrlEl.textContent = info.url;
+      shareUrlEl.href = info.url;
+      const qr = qrcode(0, 'M');
+      qr.addData(info.url);
+      qr.make();
+      qrBox.innerHTML = qr.createImgTag(5, 12);
+      shareCard.hidden = false;
+      showToast('Share: ' + info.url);
+    }).catch(() => {});
+  }
+
   btnStartCamera.addEventListener('click', startCamera);
   btnCapture.addEventListener('click', capture);
   btnRetake.addEventListener('click', retake);
@@ -628,6 +713,7 @@
     modeNotice.hidden = false;
     renderTable();
   } else {
+    showShareCard();
     syncFromServer().then(() => {
       renderTable();
       bootstrapCamera();

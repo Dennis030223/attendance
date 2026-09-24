@@ -384,6 +384,38 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ---------- Share / QR card ---------- */
+.share-card { margin-bottom: 24px; }
+.share-inner {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.qr-box {
+  background: #fff;
+  border: 2px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 10px;
+  line-height: 0;
+}
+.qr-box img { display: block; }
+.share-info { flex: 1; min-width: 220px; }
+.share-url {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+  color: var(--text-strong);
+  background: var(--surface-muted);
+  border: 1px solid var(--border-strong);
+  padding: 8px 12px;
+  border-radius: 8px;
+  word-break: break-all;
+  text-decoration: none;
+}
+.share-url:hover { border-color: var(--primary); }
+.share-hint { color: var(--text-muted); font-size: 0.85rem; margin-top: 10px; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1024px) {
   .layout {

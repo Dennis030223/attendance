@@ -1,6 +1,36 @@
 # Attendance Tracker
 
-Camera-based attendance with photo capture, automatic CSV records, and photos saved to disk.
+Camera-based attendance with photo capture, automatic CSV records, photos saved to disk, and PDF reports.
+
+## Sharing on your network (host laptop)
+
+1. Run the server (below).
+2. Open the app and use the **Scan to join** QR card on the page — other devices on the same
+   Wi-Fi scan it and open the app directly.
+3. Anyone who opens the app on their phone/laptop can log attendance — photos and CSV are saved on
+   **this host machine**, and **Save PDF** also writes a copy into the `reports/` folder here.
+
+> The app runs over **HTTPS** with a self-generated certificate so the camera works on other
+> devices. The first time you open it, your browser shows a certificate warning — choose
+> *Advanced → Proceed* (it's your own machine, the certificate simply isn't from a public CA).
+
+## Public access — any network (Cloudflare)
+
+Double-click **`start-online.command`** (macOS). It starts the server **and** a free Cloudflare
+tunnel, then opens the generated public link like:
+
+```
+https://random-words.trycloudflare.com
+```
+
+Anyone anywhere can open that link on their phone or laptop, use the camera, log attendance, and
+the photos/CSV/PDFs still save on this laptop.
+
+Notes:
+- The `trycloudflare.com` URL is **temporary** — it changes every time the script runs. The QR
+  card on the page always shows the current link, so refresh the page after restarting.
+- For a **permanent** URL you'd add a fixed domain to the tunnel instead
+  (requires a Cloudflare account + your own domain).
 
 ## Requirements
 
@@ -14,7 +44,7 @@ Camera-based attendance with photo capture, automatic CSV records, and photos sa
 
 1. Install Node.js if you don't have it.
 2. Go to the folder `attendance` and double-click **`start.bat`**.
-3. Your browser opens `http://localhost:3000` automatically.
+3. Your browser opens `https://localhost:3000` automatically.
 4. Close the black server window to stop the app.
 
 ## Run on macOS
@@ -27,7 +57,7 @@ Camera-based attendance with photo capture, automatic CSV records, and photos sa
    node server.js
    ```
 
-3. Your browser opens `http://localhost:3000` automatically.
+3. Your browser opens `https://localhost:3000` automatically.
 4. Press `Ctrl+C` in the terminal to stop the app.
 
 ## How it works

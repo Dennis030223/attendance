@@ -35,6 +35,20 @@
       <p class="page-sub">Enter the name and office, take a photo, and save. Records are auto-save<code></code>.</p>
     </div>
 
+    <section class="card share-card" id="shareCard" hidden>
+      <div class="card-head">
+        <h2>Scan to join</h2>
+        <p class="card-sub">Other devices scan this to open the app. Saved PDFs land in <strong>reports/</strong> on this machine.</p>
+      </div>
+      <div class="share-inner">
+        <div class="qr-box" id="qrBox"></div>
+        <div class="share-info">
+          <a class="share-url" id="shareUrl" target="_blank" rel="noopener"></a>
+          <p class="share-hint">Camera needs <strong>https</strong>. If a browser warns about the certificate, tap <em>Advanced &rarr; Proceed</em> &mdash; then the camera will work.</p>
+        </div>
+      </div>
+    </section>
+
     <div class="layout">
       <section class="card form-card" aria-labelledby="log-title">
         <div class="card-head">
@@ -110,6 +124,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="vendor/qrcode.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
